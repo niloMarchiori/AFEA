@@ -7,7 +7,7 @@ from pymoo.mcdm.pseudo_weights import PseudoWeights
 from pymoo.mcdm.high_tradeoff import HighTradeoffPoints
 
 class FLPOPT:
-    def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev, T_min=0.01, T_max=500.0,**kwargs):
+    def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev, T_min=0.01, T_max=2**16,**kwargs):
         self.N = N
         self.c=c
         self.S=S

@@ -1,10 +1,17 @@
 
 import numpy as np
+try:
+    import cupy as cp
+    xp = cp
+    _USE_CUPY = True
+except Exception:
+    xp = np
+    _USE_CUPY = False
 from pymoo.core.problem import ElementwiseProblem
 from pymoo.core.variable import Real, Integer, Binary
 
 class FederatedLearningProblem(ElementwiseProblem):
-    def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev=0.01, T_min=1.0, T_max=500.0,beta_h=None):
+    def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev=0.01, T_min=0.0, T_max=np.inf, beta_h=None):
         self.N = N
         self.alpha = alpha
         self.c = c
@@ -42,38 +49,37 @@ class FederatedLearningProblem(ElementwiseProblem):
     def _evaluate(self, x, out, *args, **kwargs):
         # 1. Extração das variáveis
         T_val = x["T"]
-        f_vals = np.array([x[f"f_{n}"] for n in range(self.N)])
-        beta_vals = np.array([x[f"beta_{n}"] for n in range(self.N)])
-        psi_vals = np.array([x[f"psi_{n}"] for n in range(self.N)])
-        theta_vals = np.array([x[f"theta_{n}"] for n in range(self.N)])
+        f_vals = xp.array([x[f"f_{n}"] for n in range(self.N)])
+        beta_vals = xp.array([x[f"beta_{n}"] for n in range(self.N)])
+        psi_vals = xp.array([x[f"psi_{n}"] for n in range(self.N)])
+        theta_vals = xp.array([x[f"theta_{n}"] for n in range(self.N)])
 
         # Impor limites artificialmente no evaluate
-        f_vals = np.clip(f_vals, self.f_min, self.f_max)
-        psi_vals = np.maximum(psi_vals, 1)
-        theta_vals = np.clip(theta_vals, 0.001, 0.999)
+        f_vals = xp.clip(f_vals, self.f_min, self.f_max)
+        psi_vals = xp.maximum(psi_vals, 1)
+        theta_vals = xp.clip(theta_vals, 0.001, 0.999)
 
         # 2. Cálculo das Funções G(theta) e Psi(theta)
         # G(theta_n) = - log(1 - epsilon_0) / theta_n
-        G_theta = -np.log2(1 - self.epsilon_0) / theta_vals
+        G_theta = -xp.log2(1 - self.epsilon_0) / theta_vals
         
         # Psi(theta_n) = - log(1 - theta_n)
-        Psi_theta = -np.log2(1 - theta_vals)
+        Psi_theta = -xp.log2(1 - theta_vals)
 
         # ====================================
         # FUNÇÕES OBJETIVO
         # ====================================
         # f1: min \sum (beta_n * psi_n * G(theta_n) * (alpha_n/2) * c_n * S_n * f_n^2)
-        obj1 = np.sum(beta_vals * psi_vals * G_theta * (self.alpha / 2) * self.c * self.S * (f_vals**2))
+        obj1 = xp.sum(beta_vals * psi_vals * G_theta * (self.alpha / 2) * self.c * self.S * (f_vals**2))
         
         # f2: max \sum beta_n -> min -\sum beta_n
-        rec=(self.S/self.S.sum())*(self.beta_h)
-        obj2= beta_vals*(1+rec)
-        obj2 = -np.sum(obj2)
+        rec = (self.S / self.S.sum()) * (self.beta_h)
+        obj2 = beta_vals * (1 + rec)
+        obj2 = -xp.sum(obj2)
         
         # f3: min G(theta_n) * T
         # Assumindo que queremos minimizar o tempo total ponderado pelos clientes selecionados
-        # (Se a intenção for pegar o tempo máximo do pior cliente, use: np.max(beta_vals * G_theta) * T_val)
-        obj3 = G_theta.max() * T_val
+        obj3 = (G_theta*beta_vals).max() * T_val
         
         # ====================================
         # RESTRIÇÕES (g <= 0)
@@ -85,13 +91,19 @@ class FederatedLearningProblem(ElementwiseProblem):
         g2 = Psi_theta - psi_vals
         
         # g3: beta_n * theta_n >= beta_n * theta_n^{t-1}  ==>  beta_n * (theta_n^{t-1} - theta_n) <= 0
-        g3 = beta_vals * (self.theta_prev*0.99 - theta_vals)
+        g3 = beta_vals * (self.theta_prev * 0.99 - theta_vals)
 
-        g4 = np.array([1 - beta_vals.sum()])
-        
+        g4 = xp.array([1 - beta_vals.sum()])
+
         # O Pymoo exige que todas as restrições sejam passadas como uma lista/array 1D
-        g_all = np.concatenate([g1, g2, g3, g4])
-        
-        # Atribuindo saídas
-        out["F"] = [obj1, obj2, obj3]
-        out["G"] = g_all
+        g_all = xp.concatenate([g1, g2, g3, g4])
+
+        # Converter de volta para numpy caso estejamos usando CuPy
+        if _USE_CUPY:
+            F_np = xp.asnumpy(xp.array([obj1, obj2, obj3]))
+            G_np = xp.asnumpy(g_all)
+            out["F"] = [float(F_np[0]), float(F_np[1]), float(F_np[2])]
+            out["G"] = G_np
+        else:
+            out["F"] = [obj1, obj2, obj3]
+            out["G"] = g_all
