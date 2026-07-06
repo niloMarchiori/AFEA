@@ -14,10 +14,10 @@ def load_config(path):
         return np.array(v)
 
     N = int(cfg.get('N'))
-    alpha = arr('alpha', np.ones(N) * 2E-18)
+    alpha = arr('alpha')
     c = arr('c')
     S = arr('S')
-    f_min = arr('f_min', np.ones(N) * 1.3E9)
+    f_min = arr('f_min')
     f_max = arr('f_max')
     epsilon_0 = float(cfg.get('epsilon_0', 0.98))
     theta_prev = arr('theta_prev', np.ones(N) * 0.1)
