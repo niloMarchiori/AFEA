@@ -2,6 +2,7 @@ import numpy as np
 from .solver import FLSolver
 from .problem import FederatedLearningProblem
 from .flopt_util import print_solution_details
+from .parse import load_config
 from pymoo.visualization.scatter import Scatter
 from pymoo.mcdm.pseudo_weights import PseudoWeights
 from pymoo.mcdm.high_tradeoff import HighTradeoffPoints
@@ -13,17 +14,19 @@ class FLPOPT:
         self.S=S
         self.problem = FederatedLearningProblem(N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev, T_min, T_max)
         self.res = None
-        self._beta_h=np.zeros(N)
+        self._unselected_count=np.zeros(N)
         self._theta_prev=theta_prev
+        self.history = []
+        self.current_round = 0
 
     @property
-    def beta_h(self):
-        return self._beta_h
+    def unselected_count(self):
+        return self._unselected_count
 
-    @beta_h.setter
-    def beta_h(self,beta_h:np.array):
-        self._beta_h=beta_h
-        self.problem.beta_h=beta_h
+    @unselected_count.setter
+    def unselected_count(self,unselected_count:np.array):
+        self._unselected_count=unselected_count
+        self.problem.unselected_count=unselected_count
 
     @property
     def theta_prev(self):
@@ -36,8 +39,32 @@ class FLPOPT:
 
 
     def solve(self, n_gen=500, pop_size=150, **kwargs):
+        run_input = {
+            "round": self.current_round,
+            "n_gen": n_gen,
+            "pop_size": pop_size,
+            "alpha": self.problem.alpha.tolist() if isinstance(self.problem.alpha, np.ndarray) else self.problem.alpha,
+            "c": self.problem.c.tolist() if isinstance(self.problem.c, np.ndarray) else self.problem.c,
+            "S": self.problem.S.tolist() if isinstance(self.problem.S, np.ndarray) else self.problem.S,
+            "f_min": self.problem.f_min.tolist() if isinstance(self.problem.f_min, np.ndarray) else self.problem.f_min,
+            "f_max": self.problem.f_max.tolist() if isinstance(self.problem.f_max, np.ndarray) else self.problem.f_max,
+            "epsilon_0": self.problem.epsilon_0,
+            "theta_prev": self._theta_prev.tolist() if isinstance(self._theta_prev, np.ndarray) else self._theta_prev,
+            "unselected_count": self._unselected_count.tolist() if isinstance(self._unselected_count, np.ndarray) else self._unselected_count,
+            "kwargs": kwargs
+        }
+
         self.solver = FLSolver(self.problem,pop_size=pop_size)
         self.res=self.solver.solve(n_gen=n_gen, **kwargs)
+
+        self.history.append({
+            "input": run_input,
+            "result": {
+                "F": self.res.F.tolist() if self.res.F is not None else None,
+                "X": [{k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in x.items()} if isinstance(x, dict) else (x.tolist() if isinstance(x, np.ndarray) else x) for x in self.res.X] if self.res.X is not None else None
+            }
+        })
+
         return self.res
 
     def scatterplot(self,file_name=None):
@@ -80,4 +107,40 @@ class FLPOPT:
 
         return idx_knee
 
+    def advance_round(self, selected_idx):
+        if not(self.res is not None and self.res.X is not None):
+            print("Nenhuma solução para avançar rodada.")
+            return
 
+        sol = self.res.X[selected_idx]
+        
+        # Extrair beta_n e theta_n
+        beta_vals = np.array([sol[f"beta_{n}"] for n in range(self.N)])
+        theta_vals = np.array([sol[f"theta_{n}"] for n in range(self.N)])
+
+        # Atualiza theta_prev
+        self.theta_prev = theta_vals
+
+        # Atualiza unselected_count: dispositivos não selecionados somam 1
+        self.unselected_count = self.unselected_count + (1 - beta_vals)
+
+        self.current_round += 1
+
+    def save_history(self, filepath="history.json"):
+        import json
+        import numpy as np
+
+        class NumpyEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, np.bool_):
+                    return bool(obj)
+                return super(NumpyEncoder, self).default(obj)
+
+        with open(filepath, "w") as f:
+            json.dump(self.history, f, indent=4, cls=NumpyEncoder)

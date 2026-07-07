@@ -1,1 +1,1 @@
-from FLPOPT.flopt import FLPOPT
+from FLPOPT.flopt import FLPOPT as AFEA

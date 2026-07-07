@@ -13,12 +13,14 @@ O problema é modelado como uma formulação derivada de programação não line
 
 ## Estrutura do Projeto
 
-- `multi_objetivo.py`: executa a otimização multi-objetivo usando configurações JSON e apresenta resultados de Pareto.
-- `evolucao.py`: realiza uma evolução iterativa das configurações, salvando soluções e gráficos de fronteira de Pareto em `Figuras/`.
+- `FLPOPT/`: pacote principal do projeto, com o problema, o solver e utilitários de otimização.
+- `use_cases/optimization/`: scripts de execução para otimização multi-objetivo e para rodar uma instância específica.
+- `use_cases/evolution/`: script para simular a evolução iterativa e salvar resultados em `evolucao_teorica/`.
+- `use_cases/analysis/`: scripts para análise e visualização dos resultados armazenados.
 - `instancia/parse.py`: carrega configurações JSON e converte parâmetros em vetores NumPy.
 - `instancia/random_instance.py`: gera arquivos de configuração aleatórios para testes de instância.
-- `FLPOPT/`: contém a modelagem do problema, o solver e utilitários de visualização.
-- `Dados/`: dados de métricas e instâncias de teste.
+- `configs/`: arquivos JSON de configuração usados pelos fluxos de execução.
+- `evolucao_teorica/`: artefatos gerados pelas simulações (CSV, logs e entradas de rodada).
 - `Figuras/`: gráficos de resultados gerados pelos scripts.
 
 ## Dependências
@@ -35,17 +37,27 @@ Recomenda-se usar um ambiente virtual e instalar dependências antes de executar
 
 Executar a otimização multi-objetivo:
 ```bash
-python multi_objetivo.py --config config_n22.json
+python use_cases/optimization/multi_objetivo.py --config configs/config_afea_n11.json
+```
+
+Executar uma instância específica do AFEA:
+```bash
+python use_cases/optimization/run_afea_instance.py --config configs/config_afea_n11.json
 ```
 
 Gerar uma instância aleatória de configuração:
 ```bash
-python instancia/random_instance.py --N 20 --output config_random.json
+python instancia/random_instance.py --N 20 --output configs/config_random.json
 ```
 
 Rodar a evolução iterativa e salvar resultados em CSV e PNG:
 ```bash
-python evolucao.py --config config_n22.json
+python use_cases/evolution/evolucao.py
+```
+
+Analisar os resultados gerados:
+```bash
+python use_cases/analysis/analise.py --config configs/config_afea_n11.json
 ```
 
 ## Contexto e Referência
