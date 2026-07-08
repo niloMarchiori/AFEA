@@ -39,7 +39,7 @@ def main():
     
     # Pesos utilizados na tomada de decisão (MCDM) a cada rodada
     # [Energia (f1), Unselected Count Penalty (f2), Tempo (f3)]
-    pesos = [0.6, 0.3, 0.1] 
+    pesos = [0.3, 0.3, 0.4] 
 
     for r in range(args.rounds):
         print(f"\n[{r+1}/{args.rounds}] --- EXECUTANDO RODADA {r} ---")
