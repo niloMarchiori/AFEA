@@ -16,8 +16,8 @@ def main():
     p.add_argument('--config', '-c', default=str(REPO_ROOT / 'configs' / 'config_afea_n11.json'), help='Caminho para o arquivo de configuração (JSON)')
     p.add_argument('--rounds', '-r', type=int, default=20, help='Número de rodadas para avançar')
     p.add_argument('--output', '-o', default=str(REPO_ROOT / 'use_cases' / 'historico_20_rodadas.json'), help='Caminho do arquivo de saída do histórico JSON')
-    p.add_argument('--ngen', type=int, default=100, help='Número de gerações do NSGA-II por rodada')
-    p.add_argument('--pop', type=int, default=100, help='Tamanho da população por rodada')
+    p.add_argument('--ngen', type=int, default=300, help='Número de gerações do NSGA-II por rodada')
+    p.add_argument('--pop', type=int, default=200, help='Tamanho da população por rodada')
     args = p.parse_args()
 
     # Carrega configurações

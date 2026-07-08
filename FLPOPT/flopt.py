@@ -16,7 +16,11 @@ class FLPOPT:
         self.res = None
         self._unselected_count=np.zeros(N)
         self._theta_prev=theta_prev
-        self.history = []
+        self.history = {
+            "inputs": [],
+            "found_solutions": [],
+            "chosen_solutions": []
+        }
         self.current_round = 0
 
     @property
@@ -38,7 +42,12 @@ class FLPOPT:
         self.problem.theta_prev=theta
 
 
-    def solve(self, n_gen=500, pop_size=150, **kwargs):
+    def solve(self, n_gen=500, pop_size=150, theta_prev=None, unselected_count=None, **kwargs):
+        if theta_prev is not None:
+            self.theta_prev = np.array(theta_prev)
+        if unselected_count is not None:
+            self.unselected_count = np.array(unselected_count)
+            
         run_input = {
             "round": self.current_round,
             "n_gen": n_gen,
@@ -57,12 +66,10 @@ class FLPOPT:
         self.solver = FLSolver(self.problem,pop_size=pop_size)
         self.res=self.solver.solve(n_gen=n_gen, **kwargs)
 
-        self.history.append({
-            "input": run_input,
-            "result": {
-                "F": self.res.F.tolist() if self.res.F is not None else None,
-                "X": [{k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in x.items()} if isinstance(x, dict) else (x.tolist() if isinstance(x, np.ndarray) else x) for x in self.res.X] if self.res.X is not None else None
-            }
+        self.history["inputs"].append(run_input)
+        self.history["found_solutions"].append({
+            "F": self.res.F.tolist() if self.res.F is not None else None,
+            "X": [{k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in x.items()} if isinstance(x, dict) else (x.tolist() if isinstance(x, np.ndarray) else x) for x in self.res.X] if self.res.X is not None else None
         })
 
         return self.res
@@ -113,13 +120,21 @@ class FLPOPT:
             return
 
         sol = self.res.X[selected_idx]
+        sol_f = self.res.F[selected_idx] if self.res.F is not None else None
+        
+        self.history["chosen_solutions"].append({
+            "idx": int(selected_idx),
+            "F": sol_f.tolist() if isinstance(sol_f, np.ndarray) else sol_f,
+            "X": {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in sol.items()} if isinstance(sol, dict) else (sol.tolist() if isinstance(sol, np.ndarray) else sol)
+        })
         
         # Extrair beta_n e theta_n
         beta_vals = np.array([sol[f"beta_{n}"] for n in range(self.N)])
         theta_vals = np.array([sol[f"theta_{n}"] for n in range(self.N)])
 
-        # Atualiza theta_prev
-        self.theta_prev = theta_vals
+        # Atualiza theta_prev apenas para dispositivos selecionados
+        new_theta_prev = np.where(beta_vals == 1.0, theta_vals, self.theta_prev)
+        self.theta_prev = new_theta_prev
 
         # Atualiza unselected_count: dispositivos não selecionados somam 1
         self.unselected_count = self.unselected_count + (1 - beta_vals)

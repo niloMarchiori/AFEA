@@ -2,8 +2,8 @@
 import numpy as np
 try:
     import cupy as cp
-    xp = cp
-    _USE_CUPY = True
+    xp = np
+    _USE_CUPY = False
 except Exception:
     xp = np
     _USE_CUPY = False
@@ -13,16 +13,16 @@ from pymoo.core.variable import Real, Integer, Binary
 class FederatedLearningProblem(ElementwiseProblem):
     def __init__(self, N, alpha, c, S, f_min, f_max, epsilon_0, theta_prev=0.01, T_min=0.0, T_max=np.inf, unselected_count=None):
         self.N = N
-        self.alpha = alpha
-        self.c = c
-        self.S = S
-        self.f_min = f_min *1e9
-        self.f_max = f_max *1e9
+        self.alpha = xp.array(alpha)
+        self.c = xp.array(c)
+        self.S = xp.array(S)
+        self.f_min = xp.array(f_min) *1e9
+        self.f_max = xp.array(f_max) *1e9
         self.epsilon_0 = epsilon_0
-        self.theta_prev = theta_prev
+        self.theta_prev = xp.array(theta_prev)
         self.unselected_count = unselected_count
         if unselected_count is None:
-            self.unselected_count = np.zeros(N)
+            self.unselected_count = xp.zeros(N)
         
         # Construindo o dicionário de Variáveis Mistas
         vars_dict = {}
@@ -63,8 +63,9 @@ class FederatedLearningProblem(ElementwiseProblem):
         # G(theta_n) = - log(1 - epsilon_0) / theta_n
         G_theta = -xp.log2(1 - self.epsilon_0) / theta_vals
         
-        # Psi(theta_n) = - log(1 - theta_n)
-        Psi_theta = -xp.log2(1 - theta_vals)
+        # Psi(theta_n) = ceil(- log2(1 - theta_n)) garantindo no mínimo 1
+        Psi_theta = xp.ceil(-xp.log2(1 - theta_vals))
+        Psi_theta = xp.maximum(Psi_theta, 1)
 
         # ====================================
         # FUNÇÕES OBJETIVO
@@ -85,10 +86,12 @@ class FederatedLearningProblem(ElementwiseProblem):
         # RESTRIÇÕES (g <= 0)
         # ====================================
         # g1: (psi_n * c_n * S_n / f_n) <= T  ==>  (psi_n * c_n * S_n / f_n) - T <= 0
-        g1 = (psi_vals * self.c * self.S / f_vals) - T_val
+        g1 = beta_vals * (psi_vals * self.c * self.S / f_vals) - T_val
         
-        # g2: psi_n >= Psi(theta_n)  ==>  Psi(theta_n) - psi_n <= 0
-        g2 = Psi_theta - psi_vals
+        # g2: 
+        # Selecionados (beta=1): psi_n >= Psi(theta_n)  ==>  Psi(theta_n) - psi_n <= 0
+        # Não selecionados (beta=0): psi_n <= Psi(theta_n)  ==>  psi_n - Psi(theta_n) <= 0
+        g2 = beta_vals * (Psi_theta - psi_vals) + (1 - beta_vals) * (psi_vals - Psi_theta)
         
         # g3: beta_n * theta_n >= beta_n * theta_n^{t-1}  ==>  beta_n * (theta_n^{t-1} - theta_n) <= 0
         g3 = beta_vals * (self.theta_prev * 0.99 - theta_vals)
