@@ -1,1 +1,0 @@
-from FLPOPT.flopt import FLPOPT as AFEA
