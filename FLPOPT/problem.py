@@ -27,16 +27,18 @@ class FederatedLearningProblem(ElementwiseProblem):
         # Construindo o dicionário de Variáveis Mistas
         vars_dict = {}
         
-        # Variável T (Contínua, Única global)
-        vars_dict["T"] = Real(bounds=(T_min, T_max))
+        # Variável T (Contínua, Única global) - Limite finito para evitar NaN no Pymoo
+        vars_dict["T"] = Real(bounds=(T_min, 1e6 if T_max == np.inf else T_max))
+        
+        psi_upper_bound = max(30, int(5 * (-np.log2(1 - self.epsilon_0))))
         
         for n in range(N):
             # f_n (Contínua)
-            vars_dict[f"f_{n}"] = Real(bounds=(f_min[n], f_max[n]))
+            vars_dict[f"f_{n}"] = Real(bounds=(self.f_min[n], self.f_max[n]))
             # beta_n (Binária)
             vars_dict[f"beta_{n}"] = Binary()
             # psi_n (Inteira) - N*
-            vars_dict[f"psi_{n}"] = Integer(bounds=(1, 2**10))
+            vars_dict[f"psi_{n}"] = Integer(bounds=(1, psi_upper_bound))
             # theta_n (Contínua) - Limitada em [0.01, 0.99] para evitar div/0 e log(0)
             vars_dict[f"theta_{n}"] = Real(bounds=(0.01, 0.9999))
             
@@ -63,9 +65,8 @@ class FederatedLearningProblem(ElementwiseProblem):
         # G(theta_n) = - log(1 - epsilon_0) / theta_n
         G_theta = -xp.log2(1 - self.epsilon_0) / theta_vals
         
-        # Psi(theta_n) = ceil(- log2(1 - theta_n)) garantindo no mínimo 1
-        Psi_theta = xp.ceil(-xp.log2(1 - theta_vals))
-        Psi_theta = xp.maximum(Psi_theta, 1)
+        # Psi(theta_n) = - log(1 - theta_n)
+        Psi_theta = -xp.log2(1 - theta_vals)
 
         # ====================================
         # FUNÇÕES OBJETIVO
@@ -89,12 +90,12 @@ class FederatedLearningProblem(ElementwiseProblem):
         g1 = beta_vals * (psi_vals * self.c * self.S / f_vals) - T_val
         
         # g2: 
-        # Selecionados (beta=1): psi_n >= Psi(theta_n)  ==>  Psi(theta_n) - psi_n <= 0
-        # Não selecionados (beta=0): psi_n <= Psi(theta_n)  ==>  psi_n - Psi(theta_n) <= 0
+        # Se beta_n == 1: psi_n >= Psi(theta_n) ==> Psi(theta_n) - psi_n <= 0
+        # Se beta_n == 0: psi_n <= Psi(theta_n) ==> psi_n - Psi(theta_n) <= 0
         g2 = beta_vals * (Psi_theta - psi_vals) + (1 - beta_vals) * (psi_vals - Psi_theta)
         
         # g3: beta_n * theta_n >= beta_n * theta_n^{t-1}  ==>  beta_n * (theta_n^{t-1} - theta_n) <= 0
-        g3 = beta_vals * (self.theta_prev * 0.99 - theta_vals)
+        g3 = (self.theta_prev * 0.99 - theta_vals)
 
         g4 = xp.array([1 - beta_vals.sum()])
 
